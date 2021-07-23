@@ -1,0 +1,76 @@
+// Variables for input
+def imageName
+def tagNumber
+def portNumber
+node('master') {
+    stage('Preparation') { // for display purposes
+        script {
+            // Get the input
+            def userInput = input(
+                    id: 'userInput', message: 'Enter path of test reports:?',
+                    parameters: [
+                            string(defaultValue: 'nhattinlogistics/',
+                                    description: 'Image Name',
+                                    name: 'imageName'),
+                            string(defaultValue: '80',
+                                    description: 'Tag Number',
+                                    name: 'tagNumber'),
+                            string(defaultValue: '9091',
+                                    description: 'Port Number',
+                                    name: 'portNumber'),        
+                    ])
+
+            // Save to variables. Default to empty string if not found.
+            imageName = userInput.imageName?:''
+            tagNumber = userInput.tagNumber?:''
+            portNumber = userInput.portNumber?:'9091'
+            // Echo to console
+            echo("imageName: ${imageName}")
+            echo("tagNumber: ${tagNumber}")
+            echo("portNumber:${portNumber}")
+            // Define Variable
+            //  def USER_INPUT = input(
+            //         message: 'User input required - Some Yes or No question?',
+            //         parameters: [
+            //                 [$class: 'ChoiceParameterDefinition',
+            //                  choices: ['no','yes'].join('\n'),
+            //                  name: 'input',
+            //                  description: 'Menu - select box option']
+            //         ])
+
+            // echo "The answer is: ${USER_INPUT}"
+
+            // if( "${USER_INPUT}" == "yes"){
+            //     //do something
+            // } else {
+            //     //do something else
+            // }
+        }
+    }
+}
+
+node('DEV_SERVER') {
+  stage('Deploy Test Server') {
+    if (imageName != '' && tagNumber != '' && portNumber !=''){
+      echo '----------------------------------------------'
+      withCredentials([usernamePassword(credentialsId: 'dockerhub-online', passwordVariable: 'PASSWORD', usernameVariable: 'USERNAME')]) {
+        docker.withRegistry('', 'dockerhub-online') {
+          // sh "docker ps -a | awk '{ print $1,$2 }' | grep nhattinlogistics/ntobov2 | awk '{print $1 }' | xargs -I {} docker rm {}"
+          sh "docker login -u ${USERNAME} -p ${PASSWORD} "
+          script {
+              try {
+                  sh "docker rm -f ntobov2-container-${portNumber}"
+              } catch (Exception e) {
+                  echo '----------------KHông có container để remove------------------------------'
+              }
+              sh "docker pull ${imageName}:${tagNumber}"
+              sh "docker run -d --name ntobov2-container-${portNumber} -e REACT_APP_STAGE=production -e REACT_APP_BOVERSION=${tagNumber} -p ${portNumber}:80 ${imageName}:${tagNumber}"
+          }
+        }
+      }
+      echo '----------------------------------------------'
+    }else{
+      echo '----------------KHông có thông tin để deploy------------------------------'
+    }
+  }
+}
